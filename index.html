@@ -2,120 +2,126 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>ORBITAL COMMAND | STABLE MOBILE VERSION</title>
-    <script src="https://cesium.com/downloads/cesiumjs/releases/1.114/Build/Cesium/Cesium.js"></script>
-    <link href="https://cesium.com/downloads/cesiumjs/releases/1.114/Build/Cesium/Widgets/widgets.css" rel="stylesheet">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ORBITAL COMMAND | FAIL-SAFE VERSION</title>
+    
+    <script src="https://ajax.googleapis.com/ajax/libs/cesiumjs/1.114/Build/Cesium/Cesium.js"></script>
+    <link href="https://ajax.googleapis.com/ajax/libs/cesiumjs/1.114/Build/Cesium/Widgets/widgets.css" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/satellite.js/4.0.0/satellite.min.js"></script>
+
     <style>
-        body, html { margin: 0; padding: 0; height: 100%; overflow: hidden; background: #000; color: #00cfec; font-family: monospace; }
-        #cesiumContainer { width: 100%; height: 100%; position: absolute; }
+        body, html { margin: 0; padding: 0; height: 100%; overflow: hidden; background: #000; color: #00cfec; font-family: sans-serif; }
+        #cesiumContainer { width: 100%; height: 100%; position: absolute; top: 0; left: 0; }
         
-        /* THIS UI STAYS VISIBLE NO MATTER WHAT */
         .panel { 
-            position: absolute; top: 10px; left: 10px; z-index: 1000; 
-            background: rgba(5,15,25,0.95); border: 2px solid #00cfec; 
-            padding: 12px; width: 260px; border-radius: 4px;
+            position: absolute; top: 10px; left: 10px; z-index: 9999; 
+            background: rgba(0, 10, 20, 0.9); border: 2px solid #00cfec; 
+            padding: 10px; width: 240px; border-radius: 4px;
+            pointer-events: auto;
         }
-        .group { margin-bottom: 10px; border-bottom: 1px solid #1a3a5a; padding-bottom: 8px; font-size: 11px; }
-        #status { font-size: 10px; color: #ffcc00; margin-top: 5px; }
-        label { display: block; margin: 5px 0; }
-        input[type="range"] { width: 100%; accent-color: #00cfec; }
+        #statusBox { font-size: 10px; margin-top: 5px; color: #ffcc00; }
+        .group { margin-bottom: 10px; padding-bottom: 5px; border-bottom: 1px solid #1a3a5a; }
     </style>
 </head>
 <body>
 
 <div class="panel">
-    <h1 style="font-size:14px; margin:0 0 5px 0;">SATELLITE COMMAND</h1>
-    
+    <h3 style="margin:0 0 5px 0; font-size: 14px;">COMMAND CENTER</h3>
     <div class="group">
-        <label><strong>LAYERS</strong></label>
-        <label><input type="checkbox" id="toggleSats" checked> 🛰️ SATELLITES</label>
-        <label><input type="checkbox" id="togglePlanes"> ✈️ AIR TRAFFIC</label>
-        <label><input type="checkbox" id="toggleWeather"> ☁️ WEATHER</label>
+        <label style="font-size: 11px;">TIME MULTIPLIER</label>
+        <input type="range" id="tSlider" min="1" max="10000" value="1" style="width:100%">
     </div>
-
-    <div class="group">
-        <label>TIME: <span id="sVal">1</span>x</label>
-        <input type="range" id="tSlider" min="1" max="5000" value="1">
+    <div id="statusBox">
+        GLOBE: <span id="s-globe">INIT...</span><br>
+        SATS: <span id="s-sat">0</span>
     </div>
-
-    <div id="status">INIT: <span id="s-globe">WAIT</span> | DATA: <span id="s-net">WAIT</span></div>
 </div>
 
 <div id="cesiumContainer"></div>
 
 <script>
-    // 1. AUTHENTICATION
-    Cesium.Ion.defaultAccessToken = 'EyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiI5ZDUxYjEwYS1kNTZhLTQ0MjItOTgyYy1kNjNmYTU1ZmI5NDMiLCJpZCI6Mzk4MDI1LCJpYXQiOjE3NzI2MzkzNDl9.OxyMfxGEJzV-p2WjixEXb00CxBOgPtUHUehfwq29Vo0';
+    // 1. HARD-CODED TOKEN
+    const MY_TOKEN = 'EyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiI5ZDUxYjEwYS1kNTZhLTQ0MjItOTgyYy1kNjNmYTU1ZmI5NDMiLCJpZCI6Mzk4MDI1LCJpYXQiOjE3NzI2MzkzNDl9.OxyMfxGEJzV-p2WjixEXb00CxBOgPtUHUehfwq29Vo0';
+    Cesium.Ion.defaultAccessToken = MY_TOKEN;
 
-    // 2. START GLOBE (Simplified for Mobile Stability)
     let viewer;
+
+    // 2. INITIALIZE WITH FORCED VISIBILITY
     try {
         viewer = new Cesium.Viewer('cesiumContainer', {
+            // If Ion fails, this OpenStreetMap layer WILL show the Earth
+            baseLayer: new Cesium.ImageryLayer(new Cesium.OpenStreetMapImageryProvider({
+                url: 'https://tile.openstreetmap.org/'
+            })),
             terrain: Cesium.Terrain.fromWorldTerrain(),
-            baseLayer: Cesium.ImageryLayer.fromWorldImagery(),
-            animation: false, timeline: false, infoBox: false, selectionIndicator: false
+            animation: true, // Forces the bottom date/time wheel to show
+            timeline: true,  // Forces the bottom slider to show
+            fullscreenButton: false,
+            infoBox: false
         });
-        document.getElementById('s-globe').innerText = "OK";
+        document.getElementById('s-globe').innerText = "ONLINE";
     } catch (e) {
-        document.getElementById('s-globe').style.color = "red";
-        document.getElementById('s-globe').innerText = "FAIL";
+        document.getElementById('s-globe').innerText = "CRASHED";
+        console.error(e);
     }
 
+    // 3. SATELLITE LOGIC
     const satPoints = viewer.scene.primitives.add(new Cesium.PointPrimitiveCollection());
     const satellites = [];
 
-    // 3. AGGRESSIVE DATA FETCH
-    async function getSats() {
-        document.getElementById('s-net').innerText = "SYNC...";
-        // Double-wrapped proxy to force through Android security
+    async function loadSats() {
+        // Aggressive proxy bypass
         const proxy = "https://api.allorigins.win/raw?url=";
         const target = encodeURIComponent("https://celestrak.org/NORAD/elements/gp.php?GROUP=active&FORMAT=tle");
         
         try {
-            const r = await fetch(proxy + target);
-            const d = await r.text();
-            const lines = d.split('\n');
+            const response = await fetch(proxy + target);
+            const data = await response.text();
+            const lines = data.split('\n');
             
             for (let i = 0; i < lines.length; i += 3) {
                 if (lines[i+1] && lines[i+1].includes('1 ')) {
-                    satellites.push({ 
-                        satrec: satellite.twoline2satrec(lines[i+1], lines[i+2]), 
-                        point: satPoints.add({ position: Cesium.Cartesian3.ZERO, color: Cesium.Color.CYAN, pixelSize: 4 }) 
+                    satellites.push({
+                        satrec: satellite.twoline2satrec(lines[i+1], lines[i+2]),
+                        point: satPoints.add({
+                            position: Cesium.Cartesian3.ZERO,
+                            color: Cesium.Color.CYAN,
+                            pixelSize: 4
+                        })
                     });
                 }
             }
-            document.getElementById('s-net').innerText = satellites.length;
-        } catch (e) {
-            document.getElementById('s-net').style.color = "red";
-            document.getElementById('s-net').innerText = "BLOCKED";
+            document.getElementById('s-sat').innerText = satellites.length;
+        } catch (err) {
+            document.getElementById('s-sat').innerText = "DATA ERROR";
         }
     }
 
-    // 4. ANIMATION LOOP
+    // 4. THE CLOCK LOOP
     viewer.scene.postUpdate.addEventListener(() => {
         const now = Cesium.JulianDate.toDate(viewer.clock.currentTime);
         const gmst = satellite.gstime(now);
+
         satellites.forEach(s => {
             const pv = satellite.propagate(s.satrec, now);
             if (pv.position) {
                 const gd = satellite.eciToGeodetic(pv.position, gmst);
                 s.point.position = Cesium.Cartesian3.fromDegrees(
-                    satellite.degreesLong(gd.longitude), 
-                    satellite.degreesLat(gd.latitude), 
+                    satellite.degreesLong(gd.longitude),
+                    satellite.degreesLat(gd.latitude),
                     gd.height * 1000
                 );
             }
         });
     });
 
-    // UI LISTENER
+    // 5. SLIDER LINK
     document.getElementById('tSlider').oninput = (e) => {
         viewer.clock.multiplier = e.target.value;
-        document.getElementById('sVal').innerText = e.target.value;
     };
 
-    getSats();
+    loadSats();
 </script>
 </body>
 </html>
+
