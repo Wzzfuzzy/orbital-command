@@ -2,108 +2,120 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>ORBITAL COMMAND | GOOGLE 3D EDITION</title>
+    <title>ORBITAL COMMAND | STABLE MOBILE VERSION</title>
     <script src="https://cesium.com/downloads/cesiumjs/releases/1.114/Build/Cesium/Cesium.js"></script>
     <link href="https://cesium.com/downloads/cesiumjs/releases/1.114/Build/Cesium/Widgets/widgets.css" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/satellite.js/4.0.0/satellite.min.js"></script>
     <style>
-        body, html { margin: 0; padding: 0; height: 100%; overflow: hidden; background: #000; color: #00cfec; font-family: 'Courier New', monospace; }
+        body, html { margin: 0; padding: 0; height: 100%; overflow: hidden; background: #000; color: #00cfec; font-family: monospace; }
         #cesiumContainer { width: 100%; height: 100%; position: absolute; }
-        .panel { position: absolute; top: 15px; left: 15px; z-index: 999; background: rgba(5,15,25,0.9); border: 2px solid #00cfec; padding: 15px; width: 280px; border-radius: 4px; }
-        .group { margin-bottom: 10px; border-bottom: 1px solid #1a3a5a; padding-bottom: 10px; font-size: 11px; }
-        #statusBox { font-size: 10px; color: #ffcc00; margin-top: 10px; }
-        input[type="range"] { width: 100%; }
+        
+        /* THIS UI STAYS VISIBLE NO MATTER WHAT */
+        .panel { 
+            position: absolute; top: 10px; left: 10px; z-index: 1000; 
+            background: rgba(5,15,25,0.95); border: 2px solid #00cfec; 
+            padding: 12px; width: 260px; border-radius: 4px;
+        }
+        .group { margin-bottom: 10px; border-bottom: 1px solid #1a3a5a; padding-bottom: 8px; font-size: 11px; }
+        #status { font-size: 10px; color: #ffcc00; margin-top: 5px; }
+        label { display: block; margin: 5px 0; }
+        input[type="range"] { width: 100%; accent-color: #00cfec; }
     </style>
 </head>
 <body>
 
 <div class="panel">
-    <h1>GOOGLE 3D COMMAND</h1>
+    <h1 style="font-size:14px; margin:0 0 5px 0;">SATELLITE COMMAND</h1>
+    
     <div class="group">
-        <label><input type="checkbox" id="toggleGoogle" checked> 🌍 GOOGLE 3D BUILDINGS</label>
-        <label><input type="checkbox" id="toggleSats" checked> 🛰️ ACTIVE SATELLITES</label>
+        <label><strong>LAYERS</strong></label>
+        <label><input type="checkbox" id="toggleSats" checked> 🛰️ SATELLITES</label>
+        <label><input type="checkbox" id="togglePlanes"> ✈️ AIR TRAFFIC</label>
+        <label><input type="checkbox" id="toggleWeather"> ☁️ WEATHER</label>
     </div>
+
     <div class="group">
-        <label>TIME SPEED: <span id="speedVal">1</span>x</label>
-        <input type="range" id="timeSlider" min="1" max="5000" value="1">
+        <label>TIME: <span id="sVal">1</span>x</label>
+        <input type="range" id="tSlider" min="1" max="5000" value="1">
     </div>
-    <div id="statusBox">SYSTEM: <span id="s-net">ATTEMPTING BYPASS...</span></div>
+
+    <div id="status">INIT: <span id="s-globe">WAIT</span> | DATA: <span id="s-net">WAIT</span></div>
 </div>
 
 <div id="cesiumContainer"></div>
 
 <script>
-    // 1. USE YOUR TOKEN
+    // 1. AUTHENTICATION
     Cesium.Ion.defaultAccessToken = 'EyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiI5ZDUxYjEwYS1kNTZhLTQ0MjItOTgyYy1kNjNmYTU1ZmI5NDMiLCJpZCI6Mzk4MDI1LCJpYXQiOjE3NzI2MzkzNDl9.OxyMfxGEJzV-p2WjixEXb00CxBOgPtUHUehfwq29Vo0';
 
-    const viewer = new Cesium.Viewer('cesiumContainer', {
-        terrain: Cesium.Terrain.fromWorldTerrain(),
-        animation: false, timeline: false
-    });
-
-    // 2. ADD GOOGLE EARTH 3D TILES
-    async function addGoogle3D() {
-        try {
-            const tileset = await Cesium.createGooglePhotorealistic3DTileset();
-            viewer.scene.primitives.add(tileset);
-        } catch (error) {
-            console.log("Google Tiles require Google API Key in Ion Dashboard");
-        }
+    // 2. START GLOBE (Simplified for Mobile Stability)
+    let viewer;
+    try {
+        viewer = new Cesium.Viewer('cesiumContainer', {
+            terrain: Cesium.Terrain.fromWorldTerrain(),
+            baseLayer: Cesium.ImageryLayer.fromWorldImagery(),
+            animation: false, timeline: false, infoBox: false, selectionIndicator: false
+        });
+        document.getElementById('s-globe').innerText = "OK";
+    } catch (e) {
+        document.getElementById('s-globe').style.color = "red";
+        document.getElementById('s-globe').innerText = "FAIL";
     }
-    addGoogle3D();
 
     const satPoints = viewer.scene.primitives.add(new Cesium.PointPrimitiveCollection());
     const satellites = [];
 
-    // 3. THE "BYPASS" LOADER
-    async function bypassBlock() {
-        // We use a different proxy that wraps the data in a way browsers trust more
-        const proxy = "https://api.codetabs.com/v1/proxy?quest=";
-        const target = "https://celestrak.org/NORAD/elements/gp.php?GROUP=active&FORMAT=tle";
+    // 3. AGGRESSIVE DATA FETCH
+    async function getSats() {
+        document.getElementById('s-net').innerText = "SYNC...";
+        // Double-wrapped proxy to force through Android security
+        const proxy = "https://api.allorigins.win/raw?url=";
+        const target = encodeURIComponent("https://celestrak.org/NORAD/elements/gp.php?GROUP=active&FORMAT=tle");
         
         try {
-            const response = await fetch(proxy + target);
-            const data = await response.text();
-            const lines = data.split('\n');
+            const r = await fetch(proxy + target);
+            const d = await r.text();
+            const lines = d.split('\n');
             
             for (let i = 0; i < lines.length; i += 3) {
                 if (lines[i+1] && lines[i+1].includes('1 ')) {
-                    const point = satPoints.add({
-                        position: Cesium.Cartesian3.ZERO,
-                        color: Cesium.Color.CYAN,
-                        pixelSize: 3
+                    satellites.push({ 
+                        satrec: satellite.twoline2satrec(lines[i+1], lines[i+2]), 
+                        point: satPoints.add({ position: Cesium.Cartesian3.ZERO, color: Cesium.Color.CYAN, pixelSize: 4 }) 
                     });
-                    satellites.push({ name: lines[i], satrec: satellite.twoline2satrec(lines[i+1], lines[i+2]), point });
                 }
             }
-            document.getElementById('s-net').innerText = "ONLINE: " + satellites.length + " SATS";
+            document.getElementById('s-net').innerText = satellites.length;
         } catch (e) {
-            document.getElementById('s-net').innerHTML = "<span style='color:red'>SECURITY BLOCK: USE FIREFOX</span>";
+            document.getElementById('s-net').style.color = "red";
+            document.getElementById('s-net').innerText = "BLOCKED";
         }
     }
 
+    // 4. ANIMATION LOOP
     viewer.scene.postUpdate.addEventListener(() => {
         const now = Cesium.JulianDate.toDate(viewer.clock.currentTime);
         const gmst = satellite.gstime(now);
-        satellites.forEach(sat => {
-            const pv = satellite.propagate(sat.satrec, now);
+        satellites.forEach(s => {
+            const pv = satellite.propagate(s.satrec, now);
             if (pv.position) {
                 const gd = satellite.eciToGeodetic(pv.position, gmst);
-                sat.point.position = Cesium.Cartesian3.fromDegrees(
-                    satellite.degreesLong(gd.longitude),
-                    satellite.degreesLat(gd.latitude),
+                s.point.position = Cesium.Cartesian3.fromDegrees(
+                    satellite.degreesLong(gd.longitude), 
+                    satellite.degreesLat(gd.latitude), 
                     gd.height * 1000
                 );
             }
         });
     });
 
-    document.getElementById('timeSlider').oninput = (e) => {
+    // UI LISTENER
+    document.getElementById('tSlider').oninput = (e) => {
         viewer.clock.multiplier = e.target.value;
-        document.getElementById('speedVal').innerText = e.target.value;
+        document.getElementById('sVal').innerText = e.target.value;
     };
 
-    bypassBlock();
+    getSats();
 </script>
 </body>
 </html>
